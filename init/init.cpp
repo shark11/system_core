@@ -770,6 +770,44 @@ static int console_init_action(int nargs, char **args)
     return 0;
 }
 
+#ifdef MTK_HARDWARE
+static int read_serialno()
+{
+    char pval[PROP_VALUE_MAX];
+    int fd;
+    char serialno[32];
+    size_t s;
+
+    int ret = property_get("ro.boot.serialno", pval);
+    if (ret > 0) {
+        NOTICE("Already get serial number from cmdline\n");
+        return 1;
+    }
+
+    fd = open("/sys/sys_info/serial_number", O_RDWR);
+    if (fd < 0) {
+        NOTICE("fail to open: %s\n", "/sys/sys_info/serial_number");
+        return 0;
+    }
+    s = read(fd, serialno, sizeof(char)*32);
+
+    serialno[s-1] = '\0';
+
+    close(fd);
+
+    if (s <= 0) {
+	    NOTICE("could not read serial number sys file\n");
+	    return 0;
+	}
+
+    NOTICE( "serial number=%s\n",serialno);
+
+    property_set("ro.boot.serialno", serialno);
+
+    return 1;
+}
+#endif
+
 static void import_kernel_nv(char *name, bool for_emulator)
 {
     char *value = strchr(name, '=');
@@ -817,7 +855,13 @@ static void export_kernel_boot_props() {
         { "ro.boot.mode",       "ro.bootmode",   "unknown", },
         { "ro.boot.baseband",   "ro.baseband",   "unknown", },
         { "ro.boot.bootloader", "ro.bootloader", "unknown", },
-        { "ro.boot.hardware",   "ro.hardware",   "unknown", },
+#ifdef MTK_MT6582     
+        { "ro.boot.hardware",   "ro.hardware",   "mt6582", },
+#endif
+#ifdef MTK_MT6592     
+        { "ro.boot.hardware",   "ro.hardware",   "mt6592", },
+#endif  
+
 #ifndef IGNORE_RO_BOOT_REVISION
         { "ro.boot.revision",   "ro.revision",   "0", },
 #endif
@@ -873,6 +917,10 @@ static void process_kernel_cmdline(void)
     import_kernel_cmdline(false, import_kernel_nv);
     if (qemu[0])
         import_kernel_cmdline(true, import_kernel_nv);
+
+#ifdef MTK_HARDWARE
+    read_serialno();
+#endif
 }
 
 static int queue_property_triggers_action(int nargs, char **args)
@@ -929,6 +977,8 @@ static bool selinux_is_disabled(void)
 
 static bool selinux_is_enforcing(void)
 {
+    return false;  /*return false then set to permissive*/
+
     if (ALLOW_DISABLE_SELINUX) {
         return selinux_status_from_cmdline() == SELINUX_ENFORCING;
     }
@@ -1016,7 +1066,7 @@ static int charging_mode_booting(void) {
         return 0;
 
     close(f);
-    return ('1' == cmb);
+    return ('8' == cmb);
 #endif
 }
 
